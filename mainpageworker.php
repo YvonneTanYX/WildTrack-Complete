@@ -1,13 +1,13 @@
 <?php
 require_once __DIR__ . '/config/db.php';
 require_once __DIR__ . '/check_session.php';
-requireVisitorLogin();
+requireWorkerLogin();
 
 // ── Fetch worker notifications from DB (uses existing notifications table) ──
 $workerNotifs = [];
 try {
     $pdo    = getDB();
-    $userId = $_SESSION['user']['id'] ?? 0;
+    $userId = $_SESSION['user']['user_id'] ?? 0;
 
     // Map existing notification types to worker-friendly icons
     $iconMap = [
@@ -431,7 +431,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
     <div class="nav-item" onclick="navTo('pg-tasks',this)">
       <span class="nav-item-icon"><span class="iconify" data-icon="lucide:list-checks" data-width="16"></span></span>
       <span>Daily Tasks</span>
-      <span class="nav-badge" id="sideTaskBadge">5</span>
+      <span class="nav-badge" id="sideTaskBadge">0</span>
     </div>
     <div class="nav-item" onclick="navTo('pg-incidents',this)">
       <span class="nav-item-icon"><span class="iconify" data-icon="lucide:alert-triangle" data-width="16"></span></span>
@@ -507,7 +507,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
       </div>
       <div class="stat-card">
         <div class="stat-card-top"><div class="stat-icon si-teal"><span class="iconify" data-icon="lucide:list-checks" data-width="20"></span></div><div class="stat-change sc-up" id="dashTaskChange">0 done</div></div>
-        <div class="stat-val" id="dashTaskCount">8</div>
+        <div class="stat-val" id="dashTaskCount">0</div>
         <div class="stat-lbl">Tasks Today</div>
         <div class="stat-underline su-teal"></div>
       </div>
@@ -546,7 +546,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
         <div class="dc-desc">Manage vaccination history and get reminders for upcoming due schedules.</div>
       </div>
       <div class="dash-card" onclick="navTo('pg-tasks',document.querySelectorAll('.nav-item')[5])">
-        <div class="dc-top"><div class="dc-icon"><span class="iconify" data-icon="lucide:list-checks"></span></div><div class="dc-badge" id="dashTaskBadge">5 Remaining</div></div>
+        <div class="dc-top"><div class="dc-icon"><span class="iconify" data-icon="lucide:list-checks"></span></div><div class="dc-badge" id="dashTaskBadge">0 Remaining</div></div>
         <div class="dc-title">Daily Tasks</div>
         <div class="dc-desc">View, complete and add feeding, cleaning and health check assignments for your shift.</div>
       </div>
@@ -610,6 +610,24 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
         </table>
       </div>
     </div>
+    <div class="block">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+        <div class="block-title" style="margin-bottom:0;">Feeding History</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <label style="font-size:12px;color:var(--sub);font-weight:600;">Filter by date:</label>
+          <input type="date" id="historyDateFilter" class="form-input" style="padding:5px 10px;font-size:12px;width:150px;" onchange="loadFeedingHistory()">
+          <button class="btn-secondary" style="padding:5px 14px;font-size:12px;" onclick="clearHistoryFilter()">All</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Date</th><th>Time</th><th>Animal</th><th>Food Type</th><th>Qty (kg)</th><th>Consumed</th><th>Notes</th><th>Logged By</th></tr></thead>
+          <tbody id="feedingHistoryBody">
+            <tr class="table-empty-row"><td colspan="8">Loading history...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
   </div>
 
@@ -629,7 +647,9 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
         <div class="form-group"><label class="form-label">Event Type</label>
           <select class="form-select" id="healthType"><option>Routine Check</option><option>Illness Observation</option><option>Vet Visit</option><option>Medication Given</option><option>Post-Surgery Observation</option><option>Injury Report</option></select>
         </div>
-        <div class="form-group full"><label class="form-label">Observations / Notes</label><textarea class="form-textarea" id="healthNotes" placeholder="Symptoms, behaviour, treatment details..."></textarea></div>
+        <div class="form-group full"><label class="form-label">Observations / Diagnosis</label><textarea class="form-textarea" id="healthNotes" placeholder="Symptoms, behaviour observations..."></textarea></div>
+        <div class="form-group"><label class="form-label">Treatment (if any)</label><input class="form-input" type="text" id="healthTreatment" placeholder="e.g. Antibiotics 5ml, Wound dressing..."></div>
+        <div class="form-group"><label class="form-label">Next Checkup Date</label><input class="form-input" type="date" id="healthNextCheckup"></div>
       </div>
       <div style="margin-top:16px;"><button class="btn-primary" onclick="logHealth()"><span class="iconify" data-icon="lucide:stethoscope" data-width="15"></span> Save Record</button></div>
     </div>
@@ -796,7 +816,9 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
     <div class="modal-header"><div class="modal-title">Edit Health Record</div><button class="modal-close" onclick="closeModal('editHealthModal')">✕</button></div>
     <div class="form-grid">
       <div class="form-group full"><label class="form-label">Event Type</label><select class="form-select" id="eh_type"><option>Routine Check</option><option>Illness Observation</option><option>Vet Visit</option><option>Medication Given</option><option>Post-Surgery Observation</option><option>Injury Report</option></select></div>
-      <div class="form-group full"><label class="form-label">Observations / Notes</label><textarea class="form-textarea" id="eh_notes" placeholder="Symptoms, behaviour, treatment details..."></textarea></div>
+      <div class="form-group full"><label class="form-label">Observations / Diagnosis</label><textarea class="form-textarea" id="eh_notes" placeholder="Symptoms, behaviour observations..."></textarea></div>
+      <div class="form-group"><label class="form-label">Treatment (if any)</label><input class="form-input" type="text" id="eh_treatment" placeholder="e.g. Antibiotics 5ml..."></div>
+      <div class="form-group"><label class="form-label">Next Checkup Date</label><input class="form-input" type="date" id="eh_next_checkup"></div>
     </div>
     <div class="modal-footer"><button class="btn-outline" onclick="closeModal('editHealthModal')">Cancel</button><button class="btn-primary" onclick="saveEditHealth()"><span class="iconify" data-icon="lucide:save" data-width="14"></span> Save Changes</button></div>
   </div>
@@ -853,9 +875,7 @@ body{font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background:var(--bg
       </div>
       <div class="form-group">
         <label class="form-label">Assigned Zone</label>
-        <select class="form-select" id="tm_zone">
-          <option>Zone A</option><option>Zone B</option><option>Zone C</option><option>All Zones</option>
-        </select>
+        <input class="form-input" type="text" id="tm_zone" placeholder="e.g. Zone A, North Wing, Reptile House...">
       </div>
       <div class="form-group full">
         <label class="form-label">Status</label>
@@ -899,7 +919,7 @@ function navTo(pageId,navEl){
 async function logout(){
   if(!confirm('Are you sure you want to logout?'))return;
   try{await fetch('http://localhost/WildTrack/api/auth.php?action=logout',{method:'POST',credentials:'include'});}catch(e){}
-  window.location.href='login.html';
+  window.location.href='staff-login.php';
 }
 
 // ─── SESSION ───
@@ -908,16 +928,17 @@ async function initSession(){
   try{
     const res=await fetch('http://localhost/WildTrack/api/auth.php?action=me',{credentials:'include'});
     const data=await res.json();
-    if(!data.success||(data.user.role!=='worker'&&data.user.role!=='admin')){window.location.href='login.html';return;}
+    if(!data.success||(data.user.role!=='worker'&&data.user.role!=='admin')){window.location.href='staff-login.php';return;}
     currentWorker=data.user;
     document.getElementById('sidebarName').textContent=data.user.username;
     document.getElementById('sidebarRole').textContent=data.user.role==='admin'?'Administrator':'Caretaker';
-    updateGreeting();loadAnimals();
+    updateGreeting();
+    await loadAnimals();           // loads animals → feeding log → health log
+    await loadIncidentsFromAPI();
+    await loadVaccinationsFromAPI();
+    await loadTasksFromAPI();
   }catch(e){
-    currentWorker={username:'John Doe',role:'worker'};
-    document.getElementById('sidebarName').textContent='John Doe';
-    document.getElementById('sidebarRole').textContent='Caretaker';
-    updateGreeting();loadAnimals();
+    window.location.href='staff-login.php';
   }
 }
 
@@ -1275,7 +1296,7 @@ document.addEventListener('click', e=>{
 
 // ─── ANIMALS ───
 const EMOJIS=['🦁','🐯','🐘','🦍','🐺','🦊','🐆','🐬','🦓','🦏','🐊','🦅','🦜','🦒','🐻','🦌','🐍','🦈','🐧','🦩'];
-const API='http://localhost/WildTrack/api/animals_worker.php';
+const API='api/animals_worker.php';
 let animals=[],editingId=null,deletingId=null,selEmoji='🦁';
 
 async function loadAnimals(){
@@ -1427,10 +1448,10 @@ function updateHealthCounts(){
 }
 
 // ─── COUNTERS ───
-let feedingCount=LS.get('feedingCount',0);
-let healthCount=LS.get('healthCount',0);
-let vaxCount=LS.get('vaxCount',0);
-let incidentCount=LS.get('incidentCount',0);
+let feedingCount=0;
+let healthCount=0;
+let vaxCount=0;
+let incidentCount=0;
 
 function syncDashboard(){
   document.getElementById('dashAnimalCount').textContent=animals.length;
@@ -1472,14 +1493,15 @@ async function logFeeding(){
   const type=document.getElementById('feedType').value;
   const consumed=document.getElementById('feedConsumed').value;
   const notes=document.getElementById('feedNotes').value.trim();
-  const time=new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  const time=new Date().toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit',hour12:false});
+  const timeMySQL=new Date().toTimeString().slice(0,8);
   const workerName=currentWorker?currentWorker.username:'Worker';
   // Find animal_id from name
   const animal=animals.find(a=>animalVal.startsWith(a.name));
   const entry={time,animal:animalVal.split(' ')[0],type,qty:parseFloat(qty).toFixed(1),consumed,notes,worker:workerName};
   try{
     const res=await fetch('api/feeding_worker.php',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({animal_id:animal?animal.id:null,animal_name:entry.animal,food_type:type,quantity:qty,consumed,notes,feeding_time:time})});
+      body:JSON.stringify({animal_id:animal?animal.id:null,animal_name:entry.animal,food_type:type,quantity:qty,consumed,notes,feeding_time:timeMySQL})});
     const data=await res.json();
     if(data.success){ await loadFeedingLog(); }
     else { feedingLog.unshift(entry); LS.set('feedingLog',feedingLog); renderFeedingTable(); }
@@ -1495,7 +1517,10 @@ async function loadHealthLog(){
   try{
     const res=await fetch('api/health_worker.php',{credentials:'include'});
     const data=await res.json();
-    if(data.success){ healthLog=data.records; LS.set('healthLog',healthLog); }
+    if(data.success){
+      healthLog=data.records.map(r=>({...r, rawNextCheckup: r.rawNextCheckup||''}));
+      LS.set('healthLog',healthLog);
+    }
   }catch(e){ healthLog=LS.get('healthLog',[]); }
   healthCount=healthLog.length; LS.set('healthCount',healthCount);
   renderHealthRecords(); syncDashboard();
@@ -1504,66 +1529,128 @@ function renderHealthRecords(){
   const container=document.getElementById('healthRecords');
   if(!healthLog.length){container.innerHTML='<p class="placeholder-msg">No health records yet. Save a record above to see it here.</p>';return;}
   const iMap={'Routine Check':'ri-g lucide:check-circle','Illness Observation':'ri-o lucide:eye','Vet Visit':'ri-g lucide:stethoscope','Medication Given':'ri-r lucide:pill','Post-Surgery Observation':'ri-o lucide:eye','Injury Report':'ri-r lucide:alert-triangle'};
-  container.innerHTML=healthLog.map((r,i)=>{const ic=(iMap[r.type]||'ri-g lucide:check-circle').split(' ');return`<div class="record-row"><div class="record-left"><div class="rec-icon ${ic[0]}"><span class="iconify" data-icon="${ic[1]}" data-width="17"></span></div><div><div class="rec-name">${r.type} — ${r.animal}</div><div class="rec-sub">${r.notes||'No additional notes'}</div></div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0;"><span class="rec-date">${r.dateStr}</span><div class="card-actions"><button class="icon-btn" title="Edit" onclick="editHealth(${i})"><span class="iconify" data-icon="lucide:pencil" data-width="13"></span></button><button class="icon-btn del" title="Delete" onclick="deleteHealth(${i})"><span class="iconify" data-icon="lucide:trash-2" data-width="13"></span></button></div></div></div>`;}).join('');
+  container.innerHTML=healthLog.map((r,i)=>{
+    const ic=(iMap[r.type]||'ri-g lucide:check-circle').split(' ');
+    const extras=[];
+    if(r.notes) extras.push(r.notes);
+    if(r.treatment) extras.push(`<span style="color:var(--orange);font-weight:600;">Treatment:</span> ${r.treatment}`);
+    if(r.next_checkup) extras.push(`<span style="color:var(--header);font-weight:600;">Next checkup:</span> ${r.next_checkup}`);
+    if(r.worker_name) extras.push(`<span style="color:var(--sub);">Logged by:</span> ${r.worker_name}`);
+    return`<div class="record-row"><div class="record-left"><div class="rec-icon ${ic[0]}"><span class="iconify" data-icon="${ic[1]}" data-width="17"></span></div><div><div class="rec-name">${r.type} — ${r.animal}</div><div class="rec-sub">${extras.join(' &nbsp;·&nbsp; ')||'No additional notes'}</div></div></div><div style="display:flex;align-items:center;gap:8px;flex-shrink:0;"><span class="rec-date">${r.dateStr}</span><div class="card-actions"><button class="icon-btn" title="Edit" onclick="editHealth(${i})"><span class="iconify" data-icon="lucide:pencil" data-width="13"></span></button><button class="icon-btn del" title="Delete" onclick="deleteHealth(${i})"><span class="iconify" data-icon="lucide:trash-2" data-width="13"></span></button></div></div></div>`;
+  }).join('');
 }
 async function logHealth(){
   const animalVal=document.getElementById('healthAnimal').value;
   const type=document.getElementById('healthType').value;
   const notes=document.getElementById('healthNotes').value.trim();
+  const treatment=document.getElementById('healthTreatment').value.trim();
+  const nextCheckup=document.getElementById('healthNextCheckup').value||null;
   if(!animalVal){showToast('Please select an animal.','error');return;}
   const timeStr=new Date().toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'});
   const animal=animals.find(a=>animalVal.startsWith(a.name));
-  const entry={animal:animalVal.split(' ')[0],type,notes,dateStr:'Today, '+timeStr};
+  const entry={animal:animalVal.split(' ')[0],type,notes,treatment,next_checkup:nextCheckup,dateStr:'Today, '+timeStr};
   try{
     const res=await fetch('api/health_worker.php',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({animal_id:animal?animal.id:null,health_status:type,diagnosis:notes})});
+      body:JSON.stringify({animal_id:animal?animal.id:null,health_status:type,diagnosis:notes,treatment,next_checkup:nextCheckup})});
     const data=await res.json();
     if(data.success){ await loadHealthLog(); }
     else { healthLog.unshift(entry); LS.set('healthLog',healthLog); renderHealthRecords(); }
   }catch(e){ healthLog.unshift(entry); LS.set('healthLog',healthLog); healthCount=healthLog.length; LS.set('healthCount',healthCount); renderHealthRecords(); }
   pushNotif('🩺','ni-orange','Health event recorded',`${type} logged for ${entry.animal}`);
-  document.getElementById('healthAnimal').value='';document.getElementById('healthNotes').value='';
+  document.getElementById('healthAnimal').value='';
+  document.getElementById('healthNotes').value='';
+  document.getElementById('healthTreatment').value='';
+  document.getElementById('healthNextCheckup').value='';
   syncDashboard();showToast('🩺 Health record saved!');
 }
+
 
 // ─── VACCINATION ───
 let vaxLog=LS.get('vaxLog',[]);
 function renderVaxList(){
   const container=document.getElementById('vaxList');
   if(!vaxLog.length){container.innerHTML='<p class="placeholder-msg">No vaccination records yet. Save a record above to see it here.</p>';return;}
-  container.innerHTML=vaxLog.map((r,i)=>`<div class="vax-item"><div class="vax-left"><div class="vax-icon"><span class="iconify" data-icon="lucide:syringe" data-width="17"></span></div><div><div class="vax-name">${r.animal} — ${r.name}</div><div class="vax-detail">${r.detail}</div></div></div><div style="display:flex;align-items:center;gap:8px;"><span class="vax-status vs-done">✓ Done</span><div class="card-actions"><button class="icon-btn" title="Edit" onclick="editVax(${i})"><span class="iconify" data-icon="lucide:pencil" data-width="13"></span></button><button class="icon-btn del" title="Delete" onclick="deleteVax(${i})"><span class="iconify" data-icon="lucide:trash-2" data-width="13"></span></button></div></div></div>`).join('');
+  container.innerHTML=vaxLog.map((r,i)=>`<div class="vax-item"><div class="vax-left"><div class="vax-icon"><span class="iconify" data-icon="lucide:syringe" data-width="17"></span></div><div><div class="vax-name">${r.animal} — ${r.name}</div><div class="vax-detail">${r.detail}</div>${r.loggedBy?`<div class="vax-detail" style="margin-top:2px;">Logged by: <strong>${r.loggedBy}</strong></div>`:''}</div></div><div style="display:flex;align-items:center;gap:8px;"><span class="vax-status vs-done">✓ Done</span><div class="card-actions"><button class="icon-btn" title="Edit" onclick="editVax(${i})"><span class="iconify" data-icon="lucide:pencil" data-width="13"></span></button><button class="icon-btn del" title="Delete" onclick="deleteVax(${i})"><span class="iconify" data-icon="lucide:trash-2" data-width="13"></span></button></div></div></div>`).join('');
 }
-function logVaccination(){
-  const animal=document.getElementById('vaxAnimal').value;
-  const name=document.getElementById('vaxName').value;
-  const date=document.getElementById('vaxDate').value;
-  const next=document.getElementById('vaxNext').value;
-  const vet=document.getElementById('vaxVet').value.trim();
-  if(!animal||!date){showToast('Animal and date given are required.','error');return;}
-  const fmtDate=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-MY',{day:'numeric',month:'short',year:'numeric'}):'';
-  const detail=`Given: ${fmtDate(date)}${next?' · Next: '+fmtDate(next):''}${vet?' · '+vet:''}`;
-  const entry={animal:animal.split(' ')[0],name,detail,rawDate:date,rawNext:next,vet};
-  vaxLog.unshift(entry);LS.set('vaxLog',vaxLog);
-  vaxCount++;LS.set('vaxCount',vaxCount);
-  pushNotif('💉','ni-orange','Vaccination recorded',`${name} administered to ${entry.animal}${vet?' by '+vet:''}`);
-  renderVaxList();
-  document.getElementById('vaxAnimal').value='';document.getElementById('vaxDate').value='';document.getElementById('vaxNext').value='';document.getElementById('vaxVet').value='';
-  syncDashboard();showToast('💉 Vaccination recorded!');
+// Load vaccinations from API
+async function loadVaccinationsFromAPI() {
+  try {
+    const res = await fetch('api/vaccinations_worker.php', { credentials: 'include' });
+    const data = await res.json();
+    if (data.success) {
+      vaxLog = data.vaccinations.map(v => ({
+        animal: v.animal_name,
+        name: v.vaccine_name,
+        detail: `Given: ${new Date(v.date_given).toLocaleDateString('en-MY', { day:'numeric', month:'short', year:'numeric' })}${v.next_due_date ? ' · Next: ' + new Date(v.next_due_date).toLocaleDateString('en-MY', { day:'numeric', month:'short', year:'numeric' }) : ''}${v.vet_name ? ' · ' + v.vet_name : ''}`,
+        rawDate: v.date_given,
+        rawNext: v.next_due_date,
+        vet: v.vet_name,
+        loggedBy: v.worker_name || '',
+        id: v.id
+      }));
+      LS.set('vaxLog', vaxLog);
+      vaxCount = vaxLog.length;
+      LS.set('vaxCount', vaxCount);
+      renderVaxList();
+      syncDashboard();
+    }
+  } catch(e) { console.warn(e); }
+}
+
+// Log vaccination via API
+async function logVaccination() {
+  const animalVal = document.getElementById('vaxAnimal').value;
+  const name = document.getElementById('vaxName').value;
+  const date = document.getElementById('vaxDate').value;
+  const next = document.getElementById('vaxNext').value || null;
+  const vet = document.getElementById('vaxVet').value.trim() || null;
+
+  if (!animalVal || !date) { showToast('Animal and date given are required.', 'error'); return; }
+
+  const animal = animals.find(a => animalVal.startsWith(a.name));
+  if (!animal) { showToast('Invalid animal', 'error'); return; }
+
+  const payload = {
+    animal_id: animal.id,
+    vaccine_name: name,
+    date_given: date,
+    next_due_date: next,
+    vet_name: vet
+  };
+
+  try {
+    const res = await fetch('api/vaccinations_worker.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('💉 Vaccination recorded!');
+      await loadVaccinationsFromAPI();
+      document.getElementById('vaxAnimal').value = '';
+      document.getElementById('vaxDate').value = '';
+      document.getElementById('vaxNext').value = '';
+      document.getElementById('vaxVet').value = '';
+      syncDashboard();
+    } else {
+      showToast(data.message, 'error');
+    }
+  } catch(e) {
+    showToast('Network error', 'error');
+  }
 }
 
 // ─── TASKS ───
-const defaultTasks=[
-  {id:1,name:'Morning feeding — Simba & Rex',meta:'Enclosure 1 & 2 · 07:00 AM',zone:'Zone A',priority:'high',done:false,active:true},
-  {id:2,name:'Clean Gorilla enclosure',meta:'Enclosure 3 · Est. 45 min',zone:'Zone B',priority:'med',done:false,active:true},
-  {id:3,name:'Health check — Koko',meta:'Follow-up from yesterday',zone:'Zone B',priority:'high',done:false,active:true},
-  {id:4,name:'Afternoon feeding — Nila',meta:'Enclosure 5 · 12:00 PM',zone:'Zone C',priority:'med',done:false,active:true},
-  {id:5,name:'Refill water tanks — Zone A',meta:'All Zone A enclosures',zone:'Zone A',priority:'low',done:false,active:true},
-  {id:6,name:'Fence integrity check — Zone B',meta:'Weekly routine',zone:'Zone B',priority:'med',done:false,active:true},
-  {id:7,name:'End-of-day feeding log submission',meta:'Submit before shift ends',zone:'All Zones',priority:'low',done:false,active:true},
-  {id:8,name:'Luna medication dose',meta:'Anti-parasite · 2nd dose',zone:'Zone A',priority:'high',done:false,active:true},
-];
-let tasks=LS.get('tasks',defaultTasks).map(t=>({active:true,...t}));
-let taskNextId=tasks.length?Math.max(...tasks.map(t=>t.id))+1:9;
+// Clear any stale localStorage task data (removes old hardcoded defaults)
+localStorage.removeItem('wt_tasks');
+localStorage.removeItem('wt_feedingCount');
+localStorage.removeItem('wt_healthCount');
+localStorage.removeItem('wt_vaxCount');
+localStorage.removeItem('wt_incidentCount');
+let tasks=[];
+let taskNextId=1;
 let taskFilter='all';
 let editingTaskId=null;
 
@@ -1592,7 +1679,7 @@ function renderTasks(){
            onclick="${t.active&&!t.done?`toggleTask(${t.id})`:t.active&&t.done?`toggleTask(${t.id})`:''}"></div>
       <div class="task-text">
         <div class="task-name ${t.done?'done':''} ${!t.active?'inactive-name':''}">${t.name}</div>
-        <div class="task-meta">${t.meta||''} · ${t.zone}${!t.active?' · <em>Inactive</em>':''}</div>
+        <div class="task-meta">${t.meta||''} · ${t.zone}${t.createdBy?' · Added by '+t.createdBy:''}${!t.active?' · <em>Inactive</em>':''}</div>
       </div>
       <span class="task-pri ${pc[t.priority]}">${pl[t.priority]}</span>
       <div class="task-actions">
@@ -1610,27 +1697,47 @@ function renderTasks(){
   updateTaskProgress();
 }
 
-function toggleTask(id){
-  const t=tasks.find(t=>t.id===id);
-  if(t){
-    t.done=!t.done;
-    LS.set('tasks',tasks);
-    if(t.done) pushNotif('✅','ni-green','Task completed',`"${t.name}" marked as done.`);
-    renderTasks();syncDashboard();
-  }
+async function toggleTask(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  try {
+    const res = await fetch('api/dailytask_worker.php', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, done: !t.done })
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (!t.done) pushNotif('✅','ni-green','Task completed',`"${t.name}" marked as done.`);
+      await loadTasksFromAPI();
+      syncDashboard();
+    } else {
+      showToast(data.message, 'error');
+    }
+  } catch(e) { showToast('Network error', 'error'); }
 }
 
-function toggleTaskActive(id){
-  const t=tasks.find(t=>t.id===id);
-  if(!t)return;
-  t.active=!t.active;
-  if(!t.active) t.done=false;
-  LS.set('tasks',tasks);
-  showToast(t.active?'✅ Task activated!':'⏸️ Task deactivated.');
-  pushNotif(t.active?'✅':'⏸️',t.active?'ni-green':'ni-orange',
-    t.active?'Task activated':'Task deactivated',
-    `"${t.name}" is now ${t.active?'active':'inactive'}.`);
-  renderTasks();syncDashboard();
+async function toggleTaskActive(id) {
+  const t = tasks.find(t => t.id === id);
+  if (!t) return;
+  const newActive = !t.active;
+  try {
+    const res = await fetch('api/dailytask_worker.php', {
+      method: 'PUT',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, active: newActive, done: newActive ? false : false }) // deactivate also sets done=0
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(newActive ? '✅ Task activated!' : '⏸️ Task deactivated.');
+      await loadTasksFromAPI();
+      syncDashboard();
+    } else {
+      showToast(data.message, 'error');
+    }
+  } catch(e) { showToast('Network error', 'error'); }
 }
 
 function openTaskModal(id=null){
@@ -1656,42 +1763,77 @@ function openTaskModal(id=null){
   document.getElementById('taskModal').classList.add('open');
 }
 
-function saveTask(){
-  const name=document.getElementById('tm_name').value.trim();
-  if(!name){showToast('Please enter a task description.','error');return;}
-  const meta=document.getElementById('tm_meta').value.trim();
-  const priority=document.getElementById('tm_priority').value;
-  const zone=document.getElementById('tm_zone').value;
-  const active=document.getElementById('tm_active').value==='true';
-  if(editingTaskId){
-    const t=tasks.find(t=>t.id===editingTaskId);
-    if(t) Object.assign(t,{name,meta:meta||'No details',priority,zone,active});
-    showToast('✏️ Task updated!');
-    pushNotif('✏️','ni-orange','Task updated',`"${name}" has been edited.`);
-  }else{
-    tasks.push({id:taskNextId++,name,meta:meta||'Added manually',zone,priority,done:false,active});
-    showToast('📋 Task added!');
-    pushNotif('📋','ni-green','New task added',`"${name}" added to ${zone}.`);
+async function saveTask() {
+  const name = document.getElementById('tm_name').value.trim();
+  if (!name) { showToast('Please enter a task description.', 'error'); return; }
+  const meta = document.getElementById('tm_meta').value.trim();
+  const priority = document.getElementById('tm_priority').value;
+  const zone = document.getElementById('tm_zone').value;
+  const active = document.getElementById('tm_active').value === 'true';
+
+  const payload = {
+    name,
+    meta: meta || 'No details',
+    zone,
+    priority,
+    active
+  };
+
+  let method = 'POST';
+  let url = 'api/dailytask_worker.php';
+  if (editingTaskId) {
+    method = 'PUT';
+    payload.id = editingTaskId;
   }
-  LS.set('tasks',tasks);
-  closeModal('taskModal');
-  renderTasks();syncDashboard();
+
+  try {
+    const res = await fetch(url, {
+      method,
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(editingTaskId ? '✏️ Task updated!' : '📋 Task added!');
+      await loadTasksFromAPI();
+      closeModal('taskModal');
+      syncDashboard();
+    } else {
+      showToast(data.message, 'error');
+    }
+  } catch(e) {
+    showToast('Network error', 'error');
+  }
 }
 
-function deleteTask(id){
-  const t=tasks.find(t=>t.id===id);
-  if(!t||!confirm(`Delete task "${t.name}"?`))return;
-  tasks=tasks.filter(x=>x.id!==id);
-  LS.set('tasks',tasks);
-  showToast('🗑️ Task deleted.');
-  renderTasks();syncDashboard();
+async function deleteTask(id) {
+  if (!confirm('Delete this task?')) return;
+  try {
+    const res = await fetch('api/dailytask_worker.php', {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('🗑️ Task deleted.');
+      await loadTasksFromAPI();
+      syncDashboard();
+    } else {
+      showToast(data.message, 'error');
+    }
+  } catch(e) {
+    showToast('Network error', 'error');
+  }
 }
 
-function filterTasks(f,btn){
-  taskFilter=f;
-  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+function filterTasks(f, btn) {
+  taskFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  renderTasks();
+  loadTasksFromAPI();   // reload with new filter
 }
 
 function updateTaskProgress(){
@@ -1707,7 +1849,6 @@ function updateTaskProgress(){
   document.getElementById('dashTaskBadge').textContent=(total-done)+' Remaining';
   document.getElementById('sideTaskBadge').textContent=(total-done);
 }
-renderTasks();
 
 // ─── INCIDENTS ───
 let incidentLog=LS.get('incidentLog',[]);
@@ -1718,22 +1859,69 @@ function renderIncidents(){
   container.innerHTML=incidentLog.map((r,i)=>`<div class="inc-row"><div class="inc-dot-col"><div class="inc-dot" style="background:${r.dotC};"></div><div class="inc-line"></div></div><div style="flex:1;"><div class="inc-title">${r.title}</div><div class="inc-desc">${r.desc}</div><div class="inc-meta">📅 ${r.meta}</div></div><div class="card-actions" style="flex-shrink:0;padding-top:2px;"><button class="icon-btn" title="Edit" onclick="editIncident(${i})"><span class="iconify" data-icon="lucide:pencil" data-width="13"></span></button><button class="icon-btn del" title="Delete" onclick="deleteIncident(${i})"><span class="iconify" data-icon="lucide:trash-2" data-width="13"></span></button></div></div>`).join('');
 }
 function pickSev(el,s){document.querySelectorAll('.sev-opt').forEach(o=>o.classList.remove('sel'));el.classList.add('sel');selSev=s;}
-function submitIncident(){
-  const type=document.getElementById('incType').value;
-  const desc=document.getElementById('incDesc').value.trim();
-  const animal=document.getElementById('incAnimal').value;
-  if(!desc){showToast('Please describe the incident.','error');return;}
-  const dotC=selSev==='high'?'var(--red)':selSev==='medium'?'var(--orange)':'#2e8b77';
-  const sev=selSev.charAt(0).toUpperCase()+selSev.slice(1);
-  const time=new Date().toLocaleTimeString('en-MY',{hour:'2-digit',minute:'2-digit'});
-  const workerName=currentWorker?currentWorker.username:'Worker';
-  const entry={dotC,title:`${type}${animal?' — '+animal.split(' ')[0]:''} (${sev})`,desc,meta:`Today ${time} · Reported by ${workerName}`};
-  incidentLog.unshift(entry);LS.set('incidentLog',incidentLog);
-  incidentCount++;LS.set('incidentCount',incidentCount);
-  pushNotif('🚨','ni-red','Incident reported',`${type}${animal?' — '+animal.split(' ')[0]:''} · ${sev} severity`);
-  renderIncidents();
-  document.getElementById('incAnimal').value='';document.getElementById('incDesc').value='';
-  syncDashboard();showToast('🚨 Incident report submitted!');
+// Load incidents from API on page load
+async function loadIncidentsFromAPI() {
+  try {
+    const res = await fetch('api/incident_worker.php', { credentials: 'include' });
+    const data = await res.json();
+    if (data.success) {
+      incidentLog = data.incidents.map(inc => ({
+        dotC: inc.severity === 'high' ? 'var(--red)' : (inc.severity === 'medium' ? 'var(--orange)' : '#2e8b77'),
+        title: `${inc.incident_type}${inc.animal_name ? ' — ' + inc.animal_name : ''} (${inc.severity})`,
+        desc: inc.description,
+        meta: new Date(inc.reported_at).toLocaleString('en-MY', { hour:'2-digit', minute:'2-digit', day:'numeric', month:'short', year:'numeric' })
+              + (inc.reported_by_name ? ' · Reported by ' + inc.reported_by_name : ''),
+        id: inc.id
+      }));
+      LS.set('incidentLog', incidentLog);
+      incidentCount = incidentLog.length;
+      LS.set('incidentCount', incidentCount);
+      renderIncidents();
+      syncDashboard();
+    }
+  } catch(e) { console.warn(e); }
+}
+
+// Submit incident to API
+async function submitIncident() {
+  const type = document.getElementById('incType').value;
+  const desc = document.getElementById('incDesc').value.trim();
+  const animalVal = document.getElementById('incAnimal').value;
+  if (!desc) { showToast('Please describe the incident.', 'error'); return; }
+
+  let animalId = null;
+  if (animalVal && animalVal !== 'N/A — Worker Only') {
+    const animal = animals.find(a => animalVal.startsWith(a.name));
+    if (animal) animalId = animal.id;
+  }
+
+  const payload = {
+    incident_type: type,
+    description: desc,
+    animal_id: animalId,
+    severity: selSev
+  };
+
+  try {
+    const res = await fetch('api/incident_worker.php', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('🚨 Incident report submitted!');
+      await loadIncidentsFromAPI();   // refresh list
+      document.getElementById('incAnimal').value = '';
+      document.getElementById('incDesc').value = '';
+      syncDashboard();
+    } else {
+      showToast(data.message, 'error');
+    }
+  } catch (e) {
+    showToast('Network error', 'error');
+  }
 }
 
 // ─── MODAL HELPER ───
@@ -1742,32 +1930,150 @@ function closeModal(id){document.getElementById(id).classList.remove('open');}
 // ─── FEEDING EDIT / DELETE ───
 let editFeedIdx=null;
 function editFeeding(i){editFeedIdx=i;const r=feedingLog[i];document.getElementById('ef_type').value=r.type;document.getElementById('ef_qty').value=r.qty;document.getElementById('ef_consumed').value=r.consumed;document.getElementById('ef_notes').value=r.notes||'';document.getElementById('editFeedModal').classList.add('open');}
-function saveEditFeeding(){const r=feedingLog[editFeedIdx];r.type=document.getElementById('ef_type').value;r.qty=parseFloat(document.getElementById('ef_qty').value).toFixed(1);r.consumed=document.getElementById('ef_consumed').value;r.notes=document.getElementById('ef_notes').value.trim();LS.set('feedingLog',feedingLog);closeModal('editFeedModal');renderFeedingTable();showToast('✏️ Feeding record updated!');}
-function deleteFeeding(i){if(!confirm('Delete this feeding record?'))return;feedingLog.splice(i,1);feedingCount=feedingLog.length;LS.set('feedingLog',feedingLog);LS.set('feedingCount',feedingCount);renderFeedingTable();syncDashboard();showToast('🗑️ Feeding record deleted.');}
+async function saveEditFeeding(){
+  const r=feedingLog[editFeedIdx];
+  r.type=document.getElementById('ef_type').value;
+  r.qty=parseFloat(document.getElementById('ef_qty').value).toFixed(1);
+  r.consumed=document.getElementById('ef_consumed').value;
+  r.notes=document.getElementById('ef_notes').value.trim();
+  try{ await fetch('api/feeding_worker.php',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id,food_type:r.type,quantity:r.qty,consumed:r.consumed,notes:r.notes})}); }catch(e){}
+  LS.set('feedingLog',feedingLog); closeModal('editFeedModal');
+  await loadFeedingLog(); showToast('✏️ Feeding record updated!');
+}
+async function deleteFeeding(i){
+  if(!confirm('Delete this feeding record?'))return;
+  const r=feedingLog[i];
+  try{ await fetch('api/feeding_worker.php',{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){}
+  await loadFeedingLog(); syncDashboard(); showToast('🗑️ Feeding record deleted.');
+}
+
+// ─── FEEDING HISTORY ───
+let feedingHistory=[];
+async function loadFeedingHistory(){
+  const dateFilter=document.getElementById('historyDateFilter')?document.getElementById('historyDateFilter').value:'';
+  const url='api/feeding_worker.php?mode=history'+(dateFilter?'&date='+encodeURIComponent(dateFilter):'');
+  try{
+    const res=await fetch(url,{credentials:'include'});
+    const data=await res.json();
+    feedingHistory=data.success?data.records:[];
+  }catch(e){feedingHistory=[];}
+  renderFeedingHistory();
+}
+function clearHistoryFilter(){document.getElementById('historyDateFilter').value='';loadFeedingHistory();}
+function renderFeedingHistory(){
+  const tbody=document.getElementById('feedingHistoryBody');
+  if(!tbody)return;
+  if(!feedingHistory.length){tbody.innerHTML='<tr class="table-empty-row"><td colspan="8">No past feeding records found.</td></tr>';return;}
+  const bc={'All Eaten':'b-green','Refused Food':'b-red','75% Eaten':'b-orange','50% Eaten':'b-orange','25% Eaten':'b-red'};
+  tbody.innerHTML=feedingHistory.map(r=>`<tr>
+    <td style="white-space:nowrap;font-weight:500;">${r.date}</td>
+    <td>${r.time}</td><td>${r.animal}</td><td>${r.type}</td><td>${r.qty}</td>
+    <td><span class="badge ${bc[r.consumed]||'b-orange'}">${r.consumed}</span></td>
+    <td style="color:var(--sub);font-size:12px;">${r.notes||'—'}</td>
+    <td>${r.worker||'—'}</td>
+  </tr>`).join('');
+}
 
 // ─── HEALTH EDIT / DELETE ───
 let editHealthIdx=null;
-function editHealth(i){editHealthIdx=i;const r=healthLog[i];document.getElementById('eh_type').value=r.type;document.getElementById('eh_notes').value=r.notes||'';document.getElementById('editHealthModal').classList.add('open');}
-function saveEditHealth(){const r=healthLog[editHealthIdx];r.type=document.getElementById('eh_type').value;r.notes=document.getElementById('eh_notes').value.trim();LS.set('healthLog',healthLog);closeModal('editHealthModal');renderHealthRecords();showToast('✏️ Health record updated!');}
-function deleteHealth(i){if(!confirm('Delete this health record?'))return;healthLog.splice(i,1);healthCount=healthLog.length;LS.set('healthLog',healthLog);LS.set('healthCount',healthCount);renderHealthRecords();syncDashboard();showToast('🗑️ Health record deleted.');}
+function editHealth(i){
+  editHealthIdx=i;
+  const r=healthLog[i];
+  document.getElementById('eh_type').value=r.type;
+  document.getElementById('eh_notes').value=r.notes||'';
+  document.getElementById('eh_treatment').value=r.treatment||'';
+  // next_checkup from API is formatted like "12 Apr 2025", need raw date for input
+  document.getElementById('eh_next_checkup').value=r.rawNextCheckup||'';
+  document.getElementById('editHealthModal').classList.add('open');
+}
+async function saveEditHealth(){
+  const r=healthLog[editHealthIdx];
+  r.type=document.getElementById('eh_type').value;
+  r.notes=document.getElementById('eh_notes').value.trim();
+  r.treatment=document.getElementById('eh_treatment').value.trim();
+  const rawNext=document.getElementById('eh_next_checkup').value;
+  r.rawNextCheckup=rawNext;
+  r.next_checkup=rawNext?new Date(rawNext+'T00:00:00').toLocaleDateString('en-MY',{day:'numeric',month:'short',year:'numeric'}):'';
+  try{ await fetch('api/health_worker.php',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id,health_status:r.type,diagnosis:r.notes,treatment:r.treatment,next_checkup:rawNext||null})}); }catch(e){}
+  LS.set('healthLog',healthLog); closeModal('editHealthModal');
+  await loadHealthLog(); showToast('✏️ Health record updated!');
+}
+async function deleteHealth(i){
+  if(!confirm('Delete this health record?'))return;
+  const r=healthLog[i];
+  try{ await fetch('api/health_worker.php',{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){}
+  await loadHealthLog(); syncDashboard(); showToast('🗑️ Health record deleted.');
+}
 
 // ─── VAX EDIT / DELETE ───
 let editVaxIdx=null;
 function editVax(i){editVaxIdx=i;const r=vaxLog[i];document.getElementById('ev_name').value=r.name;document.getElementById('ev_date').value=r.rawDate||'';document.getElementById('ev_next').value=r.rawNext||'';document.getElementById('ev_vet').value=r.vet||'';document.getElementById('editVaxModal').classList.add('open');}
-function saveEditVax(){const fmtDate=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-MY',{day:'numeric',month:'short',year:'numeric'}):'';const r=vaxLog[editVaxIdx];r.name=document.getElementById('ev_name').value;r.rawDate=document.getElementById('ev_date').value;r.rawNext=document.getElementById('ev_next').value;r.vet=document.getElementById('ev_vet').value.trim();r.detail=`Given: ${fmtDate(r.rawDate)}${r.rawNext?' · Next: '+fmtDate(r.rawNext):''}${r.vet?' · '+r.vet:''}`;LS.set('vaxLog',vaxLog);closeModal('editVaxModal');renderVaxList();showToast('✏️ Vaccination record updated!');}
-function deleteVax(i){if(!confirm('Delete this vaccination record?'))return;vaxLog.splice(i,1);vaxCount=vaxLog.length;LS.set('vaxLog',vaxLog);LS.set('vaxCount',vaxCount);renderVaxList();syncDashboard();showToast('🗑️ Vaccination record deleted.');}
+async function saveEditVax(){
+  const fmtDate=d=>d?new Date(d+'T00:00:00').toLocaleDateString('en-MY',{day:'numeric',month:'short',year:'numeric'}):'';
+  const r=vaxLog[editVaxIdx];
+  r.name=document.getElementById('ev_name').value;
+  r.rawDate=document.getElementById('ev_date').value;
+  r.rawNext=document.getElementById('ev_next').value;
+  r.vet=document.getElementById('ev_vet').value.trim();
+  r.detail=`Given: ${fmtDate(r.rawDate)}${r.rawNext?' · Next: '+fmtDate(r.rawNext):''}${r.vet?' · '+r.vet:''}`;
+  try{ await fetch('api/vaccinations_worker.php',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id,vaccine_name:r.name,date_given:r.rawDate,next_due_date:r.rawNext||null,vet_name:r.vet||null})}); }catch(e){}
+  LS.set('vaxLog',vaxLog); closeModal('editVaxModal');
+  await loadVaccinationsFromAPI(); showToast('✏️ Vaccination record updated!');
+}
+async function deleteVax(i){
+  if(!confirm('Delete this vaccination record?'))return;
+  const r=vaxLog[i];
+  try{ await fetch('api/vaccinations_worker.php',{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){}
+  await loadVaccinationsFromAPI(); syncDashboard(); showToast('🗑️ Vaccination record deleted.');
+}
 
 // ─── INCIDENT EDIT / DELETE ───
 let editIncIdx=null;
 function editIncident(i){editIncIdx=i;document.getElementById('ei_desc').value=incidentLog[i].desc;document.getElementById('editIncModal').classList.add('open');}
-function saveEditIncident(){incidentLog[editIncIdx].desc=document.getElementById('ei_desc').value.trim();LS.set('incidentLog',incidentLog);closeModal('editIncModal');renderIncidents();showToast('✏️ Incident report updated!');}
-function deleteIncident(i){if(!confirm('Delete this incident report?'))return;incidentLog.splice(i,1);incidentCount=incidentLog.length;LS.set('incidentLog',incidentLog);LS.set('incidentCount',incidentCount);renderIncidents();syncDashboard();showToast('🗑️ Incident report deleted.');}
+async function saveEditIncident(){
+  const r=incidentLog[editIncIdx];
+  r.desc=document.getElementById('ei_desc').value.trim();
+  try{ await fetch('api/incident_worker.php',{method:'PUT',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id,description:r.desc})}); }catch(e){}
+  LS.set('incidentLog',incidentLog); closeModal('editIncModal');
+  await loadIncidentsFromAPI(); showToast('✏️ Incident report updated!');
+}
+async function deleteIncident(i){
+  if(!confirm('Delete this incident report?'))return;
+  const r=incidentLog[i];
+  try{ await fetch('api/incident_worker.php',{method:'DELETE',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id})}); }catch(e){}
+  await loadIncidentsFromAPI(); syncDashboard(); showToast('🗑️ Incident report deleted.');
+}
+
+async function loadTasksFromAPI() {
+  // 'pending' is a UI-only alias for active+not-done; API uses 'active'
+  const apiFilter = taskFilter === 'pending' ? 'active' : taskFilter;
+  try {
+    const res = await fetch(`api/dailytask_worker.php?filter=${apiFilter}`, { credentials: 'include' });
+    const data = await res.json();
+    if (data.success) {
+      tasks = data.tasks.map(t => ({
+        id: t.id,
+        name: t.name,
+        meta: t.meta,
+        zone: t.zone,
+        priority: t.priority,
+        done: t.done,
+        active: t.active,
+        createdBy: t.created_by_name || ''
+      }));
+      LS.set('tasks', tasks);
+      renderTasks();
+      syncDashboard();
+    }
+  } catch(e) { console.warn(e); }
+}
 
 // ─── BOOT ───
-// loadAnimals() also calls loadFeedingLog, loadHealthLog after animals are ready
-renderVaxList();
-renderIncidents();
+// All data loading happens inside initSession() after auth is confirmed.
+// initSession → loadAnimals → loadFeedingLog + loadHealthLog
+//             → loadIncidentsFromAPI → loadVaccinationsFromAPI → loadTasksFromAPI
 _updateNotifBadge();
+loadFeedingHistory();
 initSession();
 </script>
 </body>

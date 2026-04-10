@@ -28,6 +28,18 @@ function requireVisitorLogin(): void
     exit;
 }
 
+function requireWorkerLogin(): void
+{
+    $u = $_SESSION['user'] ?? null;
+    if ($u && isset($u['role']) && ($u['role'] === 'worker' || $u['role'] === 'admin')) {
+        return; // valid staff — allow through
+    }
+    $target = $_SERVER['REQUEST_URI'] ?? 'mainpageworker.php';
+    $_SESSION['login_redirect'] = $target;
+    header('Location: staff-login.php?reason=login_required');
+    exit;
+}
+
 /** Returns true if any user (visitor / admin / worker) is logged in. */
 function isLoggedIn(): bool
 {

@@ -1761,8 +1761,6 @@ const addonPrices = { safari: 5, feeding: 12 };
 const addonQty    = { safari: 0, feeding: 0 };
 const addonLabels = { safari: 'Safari Shuttle', feeding: 'Feeding Pass' };
 const addonIcons  = { safari: 'lucide:bus', feeding: 'lucide:cookie' };
-
-// Map DB ticket_type value -> local key used in prices/quantities objects
 const typeKeyMap = { 'Adult': 'adult', 'Child': 'child', 'Senior': 'senior', 'Group': 'family' };
 
 async function loadPrices() {
@@ -1794,7 +1792,6 @@ async function loadPrices() {
             });
         }
     } catch(e) { /* silently fall back to defaults */ }
-
     calculateTotal();
 }
 
@@ -1887,7 +1884,6 @@ function updateAddon(type, change) {
         calculateTotal();
     }
 }
-
 function updateQty(type, change) {
     const newQty = quantities[type] + change;
     if (newQty >= 0) {
@@ -1896,7 +1892,6 @@ function updateQty(type, change) {
         calculateTotal();
     }
 }
-
 function calculateTotal() {
     let total = 0;
     total += quantities.adult  * prices.adult;
@@ -2038,10 +2033,7 @@ async function goToTNGPayment() {
         if (data.success && data.receiver_name) {
             document.getElementById('tng-receiver-name').textContent = data.receiver_name;
         }
-    } catch (e) {
-        // Keep placeholder QR if fetch fails — admin hasn't set one yet
-    }
-
+    } catch (e) {}
     showPage('page-summary', 'page-tng', 'forward');
 }
 
@@ -2344,7 +2336,8 @@ function showQRPage(tickets, totalPaid) {
             '<div class="qr-ticket-type">' + escHtml(t.ticket_type) + ' Pass</div>' +
             '<div class="qr-ticket-date">Visit: ' + escHtml(t.visit_date) + '</div>' +
             '<div class="qr-code-box">' +
-            '<img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + encodeURIComponent(t.qr_code) + '" alt="QR Code" class="qr-img" />' +
+            '<img src="https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + 
+                encodeURIComponent(t.qr_code) + '" alt="QR Code" class="qr-img" />' +
             '</div>' +
             '<div class="qr-code-text">' + escHtml(t.qr_code) + '</div>';
         container.appendChild(div);

@@ -186,7 +186,7 @@ async function doLogout() {
     } catch (e) {
         console.error('Logout failed:', e);
     } finally {
-        window.location.href = 'login.html';
+        window.location.href = 'login.html?portal=visitor&tab=login';
     }
 }
 <?php else: ?>

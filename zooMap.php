@@ -261,8 +261,8 @@ $currentPage = 'visit'; ?>
   showPanelLoading(pin);
   
   // Fetch animals and update panel, then scroll to it
-  fetch(`/WildTrack/api/MapData.php?zone=${encodeURIComponent(pin.zone)}`)
-    .then(res => res.json())
+  // AFTER (matches MapData.php's ?animals_by_zone= handler)
+fetch(`/WildTrack/api/MapData.php?animals_by_zone=${encodeURIComponent(pin.zone)}`)    .then(res => res.json())
     .then(data => {
       updatePanel(pin, data.animals ?? []);
       // Scroll to detail panel after content is loaded
@@ -283,26 +283,32 @@ $currentPage = 'visit'; ?>
       <div style="color:#bbb;font-size:13px;">Loading animals…</div>`;
   }
 
-  function updatePanel(pin, animals) {
+ function updatePanel(pin, animals) {
   const panel = document.getElementById("detail-panel");
   panel.style.background  = pin.light ?? '#fafafa';
   panel.style.borderColor = pin.color;
-
+  
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
   const chipsHTML = animals.length > 0
     ? `<div class="animals-row">
-        ${animals.map(a => `
-          <span class="animal-chip"
+        ${animals.map(a => {
+          // a can be a string (animal name) or an object with name property
+          const animalName = typeof a === 'string' ? a : (a.emoji ? a.emoji + ' ' + a.name : a.name);
+          return `<span class="animal-chip"
             style="color:${pin.color};border:1px solid ${pin.color}44; cursor:default;">
-            ${a.name}
-          </span>
-        `).join('')}
+            ${escapeHtml(animalName)}
+          </span>`;
+        }).join('')}
       </div>`
     : `<div style="font-size:13px;color:#bbb;margin-top:8px;">No animals listed for this zone.</div>`;
 
   panel.innerHTML = `
-    <div class="pin-name" style="color:${pin.color}">${pin.emoji} ${pin.name}</div>
-    <div style="font-size:12px;color:#999;margin-bottom:6px;">Zone: ${pin.zone}</div>
-    <div class="pin-desc">${pin.desc ?? ''}</div>
+    <div class="pin-name" style="color:${pin.color}">${pin.emoji} ${escapeHtml(pin.name)}</div>
+    <div style="font-size:12px;color:#999;margin-bottom:6px;">Zone: ${escapeHtml(pin.zone)}</div>
+    <div class="pin-desc">${escapeHtml(pin.desc ?? '')}</div>
     ${chipsHTML}`;
 }
 </script>

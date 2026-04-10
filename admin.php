@@ -3172,12 +3172,6 @@ textarea.form-input {
             <label>Zone</label>
             <select class="form-input" id="meInputZone" onchange="mapEditorSetField('zone',this.value)"></select>
           </div>
-          <div class="form-group">
-            <label>Animal (auto‑fill species)</label>
-            <select class="form-input" id="meInputAnimal" onchange="setPinNameFromAnimal()">
-              <option value="">— Select animal in this zone —</option>
-            </select>
-          </div>
           <div class="form-group" style="margin:0;">
             <label>Description</label>
             <textarea class="form-input" id="meInputDesc" rows="3"
@@ -3533,7 +3527,7 @@ async function doLogout() {
     } catch (error) {
         console.error("Logout request failed:", error);
     } finally {
-        window.location.href = 'login.html';
+        window.location.href = 'staff-login.php';
     }
 }
 
@@ -6236,6 +6230,9 @@ document.addEventListener('DOMContentLoaded', () => {
 /* ════════════════════════════════════════════════════════
    ZOO MAP EDITOR
 ════════════════════════════════════════════════════════ */
+/* ════════════════════════════════════════════════════════
+   ZOO MAP EDITOR (without animal dropdown)
+════════════════════════════════════════════════════════ */
 let _meMapData   = '';
 let _mePins      = [];
 let _meEditId    = null;
@@ -6245,29 +6242,33 @@ let _meIsDragging= false;
 let _meInited    = false;
 
 async function initMapEditor() {
-  if (_meInited) return;
-  _meInited = true;
+    if (_meInited) return;
+    _meInited = true;
 
-  try {
-    const [mapRes, zoneRes] = await Promise.all([
-      fetch('api/MapData.php', { credentials: 'include' }).then(r => r.json()),
-      fetch('api/MapData.php?zones', { credentials: 'include' }).then(r => r.json()),
-    ]);
+    try {
+        const [mapRes, zoneRes] = await Promise.all([
+            fetch('api/MapData.php', { credentials: 'include' }).then(r => r.json()),
+            fetch('api/MapData.php?zones', { credentials: 'include' }).then(r => r.json()),
+        ]);
 
-    _meMapData = mapRes.Map ?? '';
-    _mePins    = (Array.isArray(mapRes.Pins) ? mapRes.Pins : Object.values(mapRes.Pins || []))
-      .map(p => ({ ...p, pos: p.pos ?? { x: parseFloat(p.pos_x ?? 0), y: parseFloat(p.pos_y ?? 0) } }));
-    _meZones   = zoneRes.zones ?? [];
+        if (mapRes.error) console.error('Map data error:', mapRes.error);
+        if (zoneRes.error) console.error('Zones error:', zoneRes.error);
+        
+        _meMapData = mapRes.Map || '';
+        _mePins = (Array.isArray(mapRes.Pins) ? mapRes.Pins : Object.values(mapRes.Pins || []))
+            .map(p => ({ ...p, pos: p.pos ?? { x: parseFloat(p.pos_x ?? 0), y: parseFloat(p.pos_y ?? 0) } }));
+        _meZones = zoneRes.zones || [];
 
-    const img = document.getElementById('mapEditorImg');
-    if (img && _meMapData) img.src = _meMapData;
+        const img = document.getElementById('mapEditorImg');
+        if (img && _meMapData) img.src = _meMapData;
 
-    _meRenderPins();
-    _meRenderChips();
-    _meBindDrag();
-  } catch(e) {
-    showToast('Failed to load map data.', 'error');
-  }
+        _meRenderPins();
+        _meRenderChips();
+        _meBindDrag();
+    } catch(e) {
+        console.error('Failed to load map data:', e);
+        showToast('Failed to load map data. Check database connection.', 'error');
+    }
 }
 
 function _meMakePinSVG(color, emoji, active) {
@@ -6301,57 +6302,6 @@ function _meRenderPins() {
     btn.addEventListener('mousedown', e => _meStartDrag(e, pin.id));
     container.appendChild(btn);
   });
-}
-
-// ── Load animals for a zone and populate the dropdown ──
-async function loadAnimalsForZone(zone) {
-  const sel = document.getElementById('meInputAnimal');
-  if (!zone) {
-    sel.innerHTML = '<option value="">— Select animal —</option>';
-    return;
-  }
-  try {
-    const res = await fetch(`api/MapData.php?animals_by_zone=${encodeURIComponent(zone)}`);
-    const data = await res.json();
-    if (data.animals && Array.isArray(data.animals)) {
-      let options = '<option value="">— Select animal —</option>';
-      data.animals.forEach(animal => {
-        options += `<option value="${escapeHtml(animal)}">${escapeHtml(animal)}</option>`;
-      });
-      sel.innerHTML = options;
-    } else {
-      sel.innerHTML = '<option value="">— No animals in this zone —</option>';
-    }
-  } catch(e) {
-    console.error('loadAnimalsForZone error', e);
-    sel.innerHTML = '<option value="">— Error loading animals —</option>';
-  }
-}
-
-// ── When an animal is selected, fetch its species and update pin name ──
-async function setPinNameFromAnimal() {
-  const animalName = document.getElementById('meInputAnimal').value;
-  if (!animalName) return;
-  try {
-    const res = await fetch(`api/MapData.php?animal_species=${encodeURIComponent(animalName)}`);
-    const data = await res.json();
-    if (data.species && data.species.trim() !== '') {
-      const nameInput = document.getElementById('meInputName');
-      nameInput.value = data.species;
-      mapEditorSetField('name', data.species);
-      showToast(`Name set to species: ${data.species}`);
-    } else {
-      showToast('No species found for that animal.', 'error');
-    }
-  } catch(e) {
-    console.error('setPinNameFromAnimal error', e);
-    showToast('Failed to fetch species.', 'error');
-  }
-}
-
-// Helper to escape HTML for dropdown options
-function escapeHtml(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function _meRenderChips() {
@@ -6397,36 +6347,37 @@ function _meSetEditId(id) {
   document.getElementById('mePosX').textContent = pin.pos.x.toFixed(1);
   document.getElementById('mePosY').textContent = pin.pos.y.toFixed(1);
 
-  // Populate zone select and attach change event
+  // Populate zone select
   const sel = document.getElementById('meInputZone');
   sel.innerHTML = '<option value="">— Select zone —</option>';
-  _meZones.forEach(z => {
-    const opt = document.createElement('option');
-    opt.value = z.location_name;
-    opt.textContent = z.location_name;
-    opt.selected = pin.zone === z.location_name;
-    sel.appendChild(opt);
-  });
-
-  // Remove any previous listener and add new one
-  sel.onchange = () => {
-    mapEditorSetField('zone', sel.value);
-    loadAnimalsForZone(sel.value);
-    // Clear animal selection when zone changes
-    document.getElementById('meInputAnimal').value = '';
-  };
-
-  // Load animals for the current zone (if any)
-  if (pin.zone) {
-    loadAnimalsForZone(pin.zone);
+  if (_meZones && _meZones.length) {
+      _meZones.forEach(z => {
+          const opt = document.createElement('option');
+          opt.value = z.location_name;
+          opt.textContent = z.location_name;
+          opt.selected = pin.zone === z.location_name;
+          sel.appendChild(opt);
+      });
   } else {
-    document.getElementById('meInputAnimal').innerHTML = '<option value="">— Select animal —</option>';
+      // Fallback default zones if none from DB
+      const defaultZones = ['Zone A', 'Zone B', 'Zone C'];
+      defaultZones.forEach(zone => {
+          const opt = document.createElement('option');
+          opt.value = zone;
+          opt.textContent = zone;
+          opt.selected = pin.zone === zone;
+          sel.appendChild(opt);
+      });
   }
+
+  // Remove any previous change handler and add new one (no animal loading)
+  sel.onchange = () => {
+      mapEditorSetField('zone', sel.value);
+  };
 }
 
 function mapEditorCloseDrawer() {
   _meSetEditId(null);
-  document.getElementById('meInputAnimal').innerHTML = '<option value="">— Select animal —</option>';
 }
 
 function mapEditorSetField(key, value) {
@@ -6480,9 +6431,9 @@ async function mapEditorSave() {
       setTimeout(() => {
         if (btn) { btn.disabled = false; btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg> Save to Database'; }
       }, 2500);
-    } else { throw new Error('API returned failure'); }
+    } else { throw new Error(data.error || 'API returned failure'); }
   } catch(e) {
-    showToast('Save failed. Please try again.', 'error');
+    showToast('Save failed: ' + e.message, 'error');
     if (btn) { btn.disabled = false; btn.innerHTML = 'Save to Database'; }
   }
 }
@@ -6501,7 +6452,6 @@ function mapEditorChangeMap(e) {
   e.target.value = '';
 }
 
-// ── Drag logic ─────────────────────────────────────────────────────────────
 function _meToPercent(e) {
   const img = document.getElementById('mapEditorImg');
   if (!img) return null;
@@ -6513,37 +6463,48 @@ function _meToPercent(e) {
 }
 
 function _meStartDrag(e, pinId) {
-  e.preventDefault(); e.stopPropagation();
-  _meDragId    = pinId;
-  _meIsDragging = false;
+    e.preventDefault(); 
+    e.stopPropagation();
+    _meDragId = pinId;
+    _meIsDragging = false;
+    e.target.setAttribute('draggable', 'false');
 }
 
 function _meBindDrag() {
-  const container = document.getElementById('mapEditorContainer');
-  if (!container) return;
+    const container = document.getElementById('mapEditorContainer');
+    if (!container) return;
 
-  container.addEventListener('mousemove', e => {
-    if (!_meDragId) return;
-    _meIsDragging = true;
-    const pos = _meToPercent(e);
-    if (!pos) return;
-    _mePins = _mePins.map(p => p.id !== _meDragId ? p : { ...p, pos });
-    const btn = document.getElementById('mepin-' + _meDragId);
-    if (btn) { btn.style.left = pos.x + '%'; btn.style.top = pos.y + '%'; }
-    if (_meDragId === _meEditId) {
-      const px = document.getElementById('mePosX');
-      const py = document.getElementById('mePosY');
-      if (px) px.textContent = pos.x.toFixed(1);
-      if (py) py.textContent = pos.y.toFixed(1);
+    container.removeEventListener('mousemove', _meOnMouseMove);
+    container.removeEventListener('mouseup', _meStopDrag);
+    container.removeEventListener('mouseleave', _meStopDrag);
+    
+    function _meOnMouseMove(e) {
+        if (!_meDragId) return;
+        _meIsDragging = true;
+        const pos = _meToPercent(e);
+        if (!pos) return;
+        _mePins = _mePins.map(p => p.id !== _meDragId ? p : { ...p, pos });
+        const btn = document.getElementById('mepin-' + _meDragId);
+        if (btn) { 
+            btn.style.left = pos.x + '%'; 
+            btn.style.top = pos.y + '%'; 
+        }
+        if (_meDragId === _meEditId) {
+            const px = document.getElementById('mePosX');
+            const py = document.getElementById('mePosY');
+            if (px) px.textContent = pos.x.toFixed(1);
+            if (py) py.textContent = pos.y.toFixed(1);
+        }
     }
-  });
-
-  const stopDrag = () => {
-    _meDragId = null;
-    setTimeout(() => { _meIsDragging = false; }, 10);
-  };
-  container.addEventListener('mouseup',    stopDrag);
-  container.addEventListener('mouseleave', stopDrag);
+    
+    function _meStopDrag() {
+        _meDragId = null;
+        setTimeout(() => { _meIsDragging = false; }, 10);
+    }
+    
+    container.addEventListener('mousemove', _meOnMouseMove);
+    container.addEventListener('mouseup', _meStopDrag);
+    container.addEventListener('mouseleave', _meStopDrag);
 }
 
 // ─── TNG SETTINGS ─────────────────────────────────────────────

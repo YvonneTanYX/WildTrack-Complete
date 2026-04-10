@@ -21,7 +21,7 @@ header('Content-Type: application/json');
 requireVisitorLogin();
 
 $pdo    = getDB();
-$userId = $_SESSION['user']['id'] ?? 0;
+$userId = $_SESSION['user']['user_id'] ?? $_SESSION['user']['id'] ?? 0;
 $method = $_SERVER['REQUEST_METHOD'];
 
 // Add extra worker columns if missing
@@ -43,39 +43,82 @@ function getWorkerId(PDO $pdo, int $userId): ?int {
 try {
     switch ($method) {
 
-        // ── GET: all feeding records (today) for this worker ───────────────
+        // ── GET: feeding records — today's log or history ─────────────────
         case 'GET':
             $workerId = getWorkerId($pdo, $userId);
+            $mode     = $_GET['mode'] ?? 'today';
+            $date     = $_GET['date'] ?? '';
+
+            if ($mode === 'history') {
+                // All records BEFORE today, optionally filtered to a specific date
+                if ($date && preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
+                    $sql    = "SELECT fs.*, a.name AS animal_name, w.full_name AS worker_name
+                               FROM feeding_schedule fs
+                               LEFT JOIN animals a ON a.animal_id = fs.animal_id
+                               LEFT JOIN workers w ON w.worker_id = fs.fed_by
+                               WHERE fs.feeding_date = ?
+                               ORDER BY fs.feeding_date DESC, fs.feeding_time DESC";
+                    $params = [$date];
+                } else {
+                    $sql    = "SELECT fs.*, a.name AS animal_name, w.full_name AS worker_name
+                               FROM feeding_schedule fs
+                               LEFT JOIN animals a ON a.animal_id = fs.animal_id
+                               LEFT JOIN workers w ON w.worker_id = fs.fed_by
+                               WHERE fs.feeding_date < CURDATE()
+                               ORDER BY fs.feeding_date DESC, fs.feeding_time DESC
+                               LIMIT 200";
+                    $params = [];
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
+                $rows    = $stmt->fetchAll();
+                $records = array_map(fn($r) => [
+                    'id'       => (int)$r['feeding_id'],
+                    'date'     => $r['feeding_date'] ? date('d M Y', strtotime($r['feeding_date'])) : '—',
+                    'time'     => $r['feeding_time'] ? substr($r['feeding_time'], 0, 5) : '—',
+                    'animal'   => $r['animal_name'] ?? 'Unknown',
+                    'type'     => $r['food_type']   ?? '—',
+                    'qty'      => $r['quantity']     ?? '0',
+                    'consumed' => $r['consumed']     ?? 'All Eaten',
+                    'notes'    => $r['notes']        ?? '',
+                    'worker'   => $r['worker_name']  ?? '',
+                ], $rows);
+                echo json_encode(['success' => true, 'records' => $records]);
+                break;
+            }
+
+            // ── Today's log ───────────────────────────────────────────────
             if (!$workerId) {
-                // Admin or no worker record — return all today's feedings
                 $stmt = $pdo->prepare(
-                    "SELECT fs.*, a.name AS animal_name
+                    "SELECT fs.*, a.name AS animal_name, w.full_name AS worker_name
                      FROM feeding_schedule fs
                      LEFT JOIN animals a ON a.animal_id = fs.animal_id
+                     LEFT JOIN workers w ON w.worker_id = fs.fed_by
                      WHERE fs.feeding_date = CURDATE()
                      ORDER BY fs.feeding_time DESC"
                 );
                 $stmt->execute();
             } else {
                 $stmt = $pdo->prepare(
-                    "SELECT fs.*, a.name AS animal_name
+                    "SELECT fs.*, a.name AS animal_name, w.full_name AS worker_name
                      FROM feeding_schedule fs
                      LEFT JOIN animals a ON a.animal_id = fs.animal_id
+                     LEFT JOIN workers w ON w.worker_id = fs.fed_by
                      WHERE fs.fed_by = ? AND fs.feeding_date = CURDATE()
                      ORDER BY fs.feeding_time DESC"
                 );
                 $stmt->execute([$workerId]);
             }
-            $rows = $stmt->fetchAll();
+            $rows    = $stmt->fetchAll();
             $records = array_map(fn($r) => [
                 'id'       => (int)$r['feeding_id'],
-                'time'     => $r['feeding_time'] ? substr($r['feeding_time'],0,5) : '—',
+                'time'     => $r['feeding_time'] ? substr($r['feeding_time'], 0, 5) : '—',
                 'animal'   => $r['animal_name'] ?? 'Unknown',
                 'type'     => $r['food_type']   ?? '—',
                 'qty'      => $r['quantity']     ?? '0',
                 'consumed' => $r['consumed']     ?? 'All Eaten',
                 'notes'    => $r['notes']        ?? '',
-                'worker'   => '', // filled client-side
+                'worker'   => $r['worker_name']  ?? '',
                 'status'   => $r['status']       ?? 'Completed',
             ], $rows);
             echo json_encode(['success' => true, 'records' => $records]);
