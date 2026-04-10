@@ -6607,6 +6607,16 @@ async function updateTngSettings(password) {
     };
 })();
 
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 async function refreshTngHistory() {
     const container = document.getElementById('tngHistoryList');
     if (!container) return;
@@ -6615,7 +6625,8 @@ async function refreshTngHistory() {
     try {
         const res = await fetch('api/get_tng_history.php', { credentials: 'include' });
         const data = await res.json();
-        if (!data.success || !data.history.length) {
+        const history = data.history ?? data.data?.history ?? [];
+          if (!data.success || !history.length) {
             container.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding:20px;">No QR changes recorded yet.</div>';
             return;
         }
@@ -6630,7 +6641,7 @@ async function refreshTngHistory() {
                 '<th style="padding:10px 12px; text-align:left;">Changed At</th>' +
                 '</tr></thead><tbody>';
 
-        data.history.forEach(row => {
+          history.forEach(row => {
             const qrChanged = (row.old_qr_path !== row.new_qr_path);
             const qrBadge = qrChanged 
                 ? '<span style="background:var(--green-pale); color:var(--green-dark); padding:2px 10px; border-radius:20px; font-size:12px; font-weight:600;">✓ Yes</span>'
@@ -6659,10 +6670,11 @@ async function refreshTngHistory() {
         _origSwitchTab(btn, tabId);
         if (tabId === 'tab-payment-settings') {
             loadTngSettings();
-            refreshTngHistory();
+            refreshTngHistory(); 
         }
     };
 })();
+
 
 </script>
 </body>
