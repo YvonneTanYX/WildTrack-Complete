@@ -280,7 +280,8 @@
           showToast('This is a visitor account. Please use the visitor login.','❌');
           setLoading('btn-slogin',false); return;
         }
-        if (data.must_change_pw) {
+        if (data.user.must_change_pw) {
+          sessionStorage.setItem('pendingRole', role);
           document.getElementById('step-login').style.display = 'none';
           document.getElementById('step-changepassword').classList.add('active');
           setLoading('btn-slogin',false); return;
@@ -316,10 +317,10 @@
       var data = await res.json();
       if (data.success) {
         showToast('Password set! Redirecting… 🐾');
-        var meRes  = await fetch('http://localhost/WildTrack/api/auth.php?action=me', {credentials:'include'});
-        var meData = await meRes.json();
+        var role = sessionStorage.getItem('pendingRole');
+        sessionStorage.removeItem('pendingRole');
         setTimeout(function(){
-          window.location.href = meData.user && meData.user.role==='admin' ? 'admin.php' : 'mainpageworker.php';
+          window.location.href = role === 'admin' ? 'admin.php' : 'mainpageworker.php';
         }, 1200);
       } else {
         showToast(data.message,'❌'); setLoading('btn-changepw',false);
