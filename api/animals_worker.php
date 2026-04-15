@@ -3,11 +3,10 @@
  * api/animals_worker.php
  *
  * Serves animals for the worker dashboard.
- * Your `animals` table has: animal_id, name, species, habitat, diet,
- * conservation_status, location_id, date_added.
+ * Your `animals` table has: animal_id, name, species, diet, zone,
+ * date_added, emoji, age, weight, gender, notes, status.
  *
- * The worker page also needs: emoji, age, weight, gender, zone, notes, status.
- * We add these as optional extended columns (ALTER only runs once).
+ * NOTE: habitat and conservation_status do NOT exist in the DB — removed.
  *
  * GET    — list all animals
  * POST   — add a new animal
@@ -45,7 +44,6 @@ function rowToAnimal(array $r): array {
         'id'      => (int)$r['animal_id'],
         'name'    => $r['name'],
         'species' => $r['species']  ?? '',
-        'habitat' => $r['habitat']  ?? '',
         'diet'    => $r['diet']     ?? '',
         'emoji'   => $r['emoji']    ?? '🐾',
         'age'     => $r['age']      ?? 'Unknown',
@@ -54,7 +52,6 @@ function rowToAnimal(array $r): array {
         'zone'    => $r['zone']     ?? '',
         'notes'   => $r['notes']    ?? '',
         'status'  => $r['status']   ?? 'healthy',
-        'conservation_status' => $r['conservation_status'] ?? '',
     ];
 }
 
@@ -82,13 +79,13 @@ try {
             }
             $stmt = $pdo->prepare(
                 "INSERT INTO animals
-                 (name, species, habitat, diet, conservation_status,
+                 (name, species, diet,
                   emoji, age, weight, gender, zone, notes, status, date_added)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURDATE())"
+                 VALUES (?,?,?,?,?,?,?,?,?,?,CURDATE())"
             );
             $stmt->execute([
-                $d['name'], $d['species'], $d['habitat'] ?? '',
-                $d['diet'] ?? '', $d['conservation_status'] ?? '',
+                $d['name'], $d['species'],
+                $d['diet'] ?? '',
                 $d['emoji'] ?? '🐾', $d['age'] ?? 'Unknown',
                 $d['weight'] ?? 'Unknown', $d['gender'] ?? 'Unknown',
                 $d['zone'] ?? '', $d['notes'] ?? '',
@@ -107,13 +104,13 @@ try {
             }
             $stmt = $pdo->prepare(
                 "UPDATE animals SET
-                 name=?, species=?, habitat=?, diet=?, conservation_status=?,
+                 name=?, species=?, diet=?,
                  emoji=?, age=?, weight=?, gender=?, zone=?, notes=?, status=?
                  WHERE animal_id=?"
             );
             $stmt->execute([
-                $d['name'] ?? '', $d['species'] ?? '', $d['habitat'] ?? '',
-                $d['diet'] ?? '', $d['conservation_status'] ?? '',
+                $d['name'] ?? '', $d['species'] ?? '',
+                $d['diet'] ?? '',
                 $d['emoji'] ?? '🐾', $d['age'] ?? 'Unknown',
                 $d['weight'] ?? 'Unknown', $d['gender'] ?? 'Unknown',
                 $d['zone'] ?? '', $d['notes'] ?? '',

@@ -83,11 +83,17 @@ switch ($action) {
             respond(false, 'Wrong email or password.');
         }
 
+        if (!(bool)$user['is_active']) {
+            http_response_code(403);
+            respond(false, 'Your account has been deactivated. Please contact an administrator.');
+        }
+
         $_SESSION['user'] = [
-            'user_id' => $user['user_id'],
-            'username' => $user['username'],
-            'role' => $user['role'],
-            'email' => $user['email'],
+            'user_id'       => $user['user_id'],
+            'username'      => $user['username'],
+            'role'          => $user['role'],
+            'email'         => $user['email'],
+            'must_change_pw' => (bool)$user['must_change_pw'],
         ];
 
         respond(true, 'Login successful.', ['user' => $_SESSION['user']]);
@@ -110,23 +116,24 @@ switch ($action) {
     case 'change_password': {
         $user = currentUser();
         if (!$user) respond(false, 'Not logged in.');
-        
+
         $body = jsonBody();
         $newPw = $body['new_password'] ?? '';
         $confirmPw = $body['confirm_password'] ?? '';
-        
+
         if (strlen($newPw) < 8)
             respond(false, 'Password must be at least 8 characters.');
         if ($newPw !== $confirmPw)
             respond(false, 'Passwords do not match.');
-        
+
         $hashed = password_hash($newPw, PASSWORD_BCRYPT);
         $pdo = getDB();
         $pdo->prepare("UPDATE users SET password = ?, must_change_pw = 0 WHERE user_id = ?")
             ->execute([$hashed, $user['user_id']]);
-        
-        $_SESSION['user']['must_change_pw'] = 0;
-        
+
+        // Clear the flag in session so guards elsewhere see it immediately
+        $_SESSION['user']['must_change_pw'] = false;
+
         respond(true, 'Password updated successfully.');
         break;
     }
