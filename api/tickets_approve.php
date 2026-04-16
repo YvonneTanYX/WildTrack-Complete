@@ -116,39 +116,16 @@ function checkNotifications(): void {
 //   username      (optional override — updates users.username)
 //   email         (optional override — updates users.email)
 // ════════════════════════════════════════════════════════════════════════
+function approvePayment(): void {
+    $admin = requireRole('admin');
+    $body  = jsonBody();
 
-   function approvePayment(): void {
-    requireRole('admin');
-    $currentAdminId = $_SESSION['user']['user_id'];
-    $data = json_decode(file_get_contents('php://input'), true);
-    $bookingRef = $data['booking_ref'] ?? '';
-
-    if (!$bookingRef) respond(false, 'booking_ref is required.');
-    $pdo = getDB();
-
-    try {
-        $pdo->beginTransaction();
-
-        // BUG FIX: Store the ID of the admin who approved it
-        $stmt = $pdo->prepare("
-         UPDATE tickets 
-         SET status = 'approved', 
-         approved_by_id = ? 
-         WHERE booking_ref = ? AND status = 'pending'
-        ");
-        $stmt->execute([$currentAdminId, $bookingRef]);
-        $pdo->prepare("UPDATE notifications SET admin_read_at = NOW() WHERE booking_ref = ? AND type = 'new_payment_proof'")->execute([$bookingRef]);
-        
-        $pdo->commit();
-        respond(true, 'Payment approved and records updated.');
-    } catch (Exception $e) {
-        $pdo->rollBack();
-        respond(false, $e->getMessage());
-    }
-}
+    $adminId   = $admin['user_id']  ?? null;
+    $adminUser = $admin['username'] ?? 'Admin';
 
     // Resolve the best display name: prefer full_name from workers table
     $adminName = $adminUser;
+    $pdo = getDB();
     if ($adminId) {
         $wRow = $pdo->prepare("SELECT full_name FROM workers WHERE user_id = ? LIMIT 1");
         $wRow->execute([$adminId]);
@@ -160,8 +137,6 @@ function checkNotifications(): void {
 
     $bookingRef = clean($body['booking_ref'] ?? '');
     if (!$bookingRef) respond(false, 'booking_ref is required.');
-
-    $pdo = getDB();
 
     // Fetch all tickets for this booking
     $stmt = $pdo->prepare(
@@ -235,7 +210,7 @@ function checkNotifications(): void {
                 $newType  ?: null,
                 $newDate  ?: null,
                 $newPrice,
-                $adminName,  
+                $adminName,
                 $t['ticket_id'],
             ]);
             $approvedIds[] = $t['ticket_id'];

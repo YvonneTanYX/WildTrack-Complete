@@ -3239,7 +3239,6 @@ textarea.form-input {
         <label>Audience</label>
         <select class="form-input" id="amAudience">
           <option>All Visitors</option>
-          <option>Members Only</option>
           <option>Staff Only</option>
         </select>
       </div>
